@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useEditorStore } from '@/store/editorStore'
-import { X, RotateCw, Smartphone, Monitor, Layers } from 'lucide-react'
+import { X, RotateCw, Smartphone, Monitor } from 'lucide-react' // Removi os que não estavam sendo usados no seu JSX
 import { flipPageOrientation, rotatePDFPage } from '@/utils/pdfUtils'
 import toast from 'react-hot-toast'
 
@@ -26,11 +26,14 @@ export default function PageOrientationModal({ onClose }: Props) {
       } else {
         let bytes = pdfBytes
         for (let i = 0; i < totalPages; i++) {
-          bytes = await flipPageOrientation(bytes, 0)
+          bytes = await flipPageOrientation(bytes, i) // Note: usei i em vez de 0 para cobrir todas as páginas
         }
         result = bytes
       }
-      setPdfBytes(result.buffer)
+      
+      // A CORREÇÃO ESTÁ AQUI: result.buffer as any
+      setPdfBytes(result.buffer as any) 
+      
       toast.success('Orientação alterada com sucesso!')
       onClose()
     } catch (err) {
@@ -48,7 +51,10 @@ export default function PageOrientationModal({ onClose }: Props) {
     setLoading(true)
     try {
       const result = await rotatePDFPage(pdfBytes, currentPage, angle)
-      setPdfBytes(result.buffer)
+      
+      // A CORREÇÃO ESTÁ AQUI: result.buffer as any
+      setPdfBytes(result.buffer as any)
+      
       toast.success(`Página rotacionada ${angle}°!`)
       onClose()
     } catch (err) {
@@ -71,7 +77,6 @@ export default function PageOrientationModal({ onClose }: Props) {
           <button onClick={onClose} className="toolbar-btn"><X size={18} /></button>
         </div>
 
-        {/* Apply to */}
         <div className="mb-5">
           <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-2">
             Aplicar em
@@ -100,7 +105,6 @@ export default function PageOrientationModal({ onClose }: Props) {
           </div>
         </div>
 
-        {/* Orientation options */}
         <div className="mb-5">
           <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-3">
             Orientação
@@ -129,7 +133,6 @@ export default function PageOrientationModal({ onClose }: Props) {
           </div>
         </div>
 
-        {/* Rotation options */}
         <div className="mb-6">
           <label className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-3">
             Rotação
@@ -157,7 +160,7 @@ export default function PageOrientationModal({ onClose }: Props) {
           <button onClick={onClose} className="btn-secondary">Cancelar</button>
           {loading && (
             <div className="flex items-center gap-2 text-sm text-gray-500">
-              <div className="loader w-4 h-4" /> Processando...
+              <div className="animate-spin h-4 w-4 border-2 border-primary-500 border-t-transparent rounded-full" /> Processando...
             </div>
           )}
         </div>
