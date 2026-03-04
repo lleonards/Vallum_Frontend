@@ -1,7 +1,0 @@
-// Environment variables configuradas para Vite
-export const config = {
-  supabaseUrl: (import.meta as any).env.VITE_SUPABASE_URL || '',
-  supabaseAnonKey: (import.meta as any).env.VITE_SUPABASE_ANON_KEY || '',
-  apiUrl: (import.meta as any).env.VITE_API_URL || 'http://localhost:5000',
-  stripePublicKey: (import.meta as any).env.VITE_STRIPE_PUBLIC_KEY || '',
-}
