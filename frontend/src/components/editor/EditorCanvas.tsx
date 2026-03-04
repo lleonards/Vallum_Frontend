@@ -8,7 +8,7 @@ import toast from 'react-hot-toast'
 // Acesso seguro para evitar erros de tipos/versão
 const fabric = (fabricLib as any).fabric || fabricLib;
 
-// CORREÇÃO DO 404: Adicionado 'https:' explicitly para evitar falha no carregamento do worker
+// CORREÇÃO DO 404
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
 
 export default function EditorCanvas() {
@@ -29,12 +29,11 @@ export default function EditorCanvas() {
   const isDragging = useRef(false)
   const lastPos = useRef({ x: 0, y: 0 })
 
-  // 1. CARREGAR PDF (Com supressão de erros para o Warning TT)
+  // 1. CARREGAR PDF
   useEffect(() => {
     if (!pdfBytes) return
     setLoading(true)
     
-    // stopAtErrors: false ajuda a carregar PDFs mesmo com problemas menores de fontes (Warning TT)
     const loadingTask = pdfjsLib.getDocument({ data: pdfBytes, stopAtErrors: false })
     
     loadingTask.promise.then((doc) => {
@@ -51,22 +50,27 @@ export default function EditorCanvas() {
     })
   }, [pdfBytes, setTotalPages, setPages, setLoading])
 
-  // 2. RENDERIZAR PÁGINA (BACKGROUND)
+  // 2. RENDERIZAR PÁGINA (CORREÇÃO DA DISTORÇÃO "ESTICADA")
   useEffect(() => {
     if (!pdfDoc || !pdfCanvasRef.current) return
     const renderPage = async () => {
       try {
         const page = await pdfDoc.getPage(currentPage + 1)
-        const viewport = page.getViewport({ scale: zoom * 1.5 })
+        
+        // Mantemos a proporção exata ditada pelo PDFjs usando o zoom atual
+        const viewport = page.getViewport({ scale: zoom })
         
         const canvas = pdfCanvasRef.current!
         const ctx = canvas.getContext('2d', { alpha: false })!
         
+        // Define o tamanho real do canvas (Físico e CSS) para evitar distorção
         canvas.width = viewport.width
         canvas.height = viewport.height
+        canvas.style.width = `${viewport.width}px`
+        canvas.style.height = `${viewport.height}px`
+        
         setCanvasSize({ width: viewport.width, height: viewport.height })
         
-        // intent: 'print' melhora a qualidade da renderização no canvas
         await page.render({ canvasContext: ctx, viewport, intent: 'print' }).promise
       } catch (err) {
         console.error('Erro ao renderizar página:', err)
@@ -122,18 +126,16 @@ export default function EditorCanvas() {
     canvas.renderAll()
   }, [activeTool, fontFamily, fontSize, fontColor, fontBold, fontItalic, fontUnderline, textAlign, fillColor, strokeColor, strokeWidth])
 
-  // 5. INICIALIZAR FABRIC (COM BLINDAGEM ANTI-ERRO REMOVECHILD)
+  // 5. INICIALIZAR FABRIC
   useEffect(() => {
     if (!canvasRef.current || !pdfBytes) return
     
-    // Criar instância
     const canvas = new fabric.Canvas(canvasRef.current, {
       selection: true,
       preserveObjectStacking: true,
     })
     fabricRef.current = canvas
 
-    // Eventos
     canvas.on('object:modified', () => { setHasChanges(true); saveCanvasState(); })
     canvas.on('object:added', () => setHasChanges(true))
     canvas.on('mouse:down', (opt: any) => {
@@ -153,14 +155,13 @@ export default function EditorCanvas() {
     })
     canvas.on('mouse:up', () => { isDragging.current = false })
 
-    // LIMPEZA CRÍTICA: Desmonta o Fabric antes do React tentar mexer no DOM
     return () => {
       if (fabricRef.current) {
         fabricRef.current.dispose()
         fabricRef.current = null
       }
     }
-  }, [currentPage, !!pdfBytes]) // Recria apenas se necessário
+  }, [currentPage, !!pdfBytes])
 
   // 6. SINCRONIZAR FERRAMENTAS E TAMANHO
   useEffect(() => {
@@ -180,7 +181,7 @@ export default function EditorCanvas() {
     canvas.renderAll()
   }, [canvasSize, activeTool, strokeColor, strokeWidth])
 
-  // 7. ATALHOS (COPY, PASTE, DELETE) - Totalmente preservados
+  // 7. ATALHOS (COPY, PASTE, DELETE)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const canvas = fabricRef.current
@@ -232,67 +233,75 @@ export default function EditorCanvas() {
   })
 
   return (
-    // Fundo cinza estilo "estúdio" para destacar a folha
-    <div className="editor-canvas-wrapper flex flex-col items-center py-12 min-h-screen bg-[#F3F4F6] dark:bg-dark-950 overflow-auto" ref={containerRef}>
+    // Fundo escuro estilo CutePDF (#2b2b2b) e overflow-auto para a "rodagem" funcionar
+    <div 
+      className="editor-canvas-wrapper flex justify-center items-start min-h-screen bg-[#2b2b2b] overflow-auto" 
+      ref={containerRef}
+      style={{ padding: '40px' }} // Padding garante que tenha espaço ao rodar pra cima/baixo
+    >
       
       {isLoading ? (
         <div className="flex flex-col items-center gap-3 mt-20">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600" />
-          <p className="text-sm text-gray-500">Preparando editor...</p>
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-white" />
+          <p className="text-sm text-gray-300">Preparando editor...</p>
         </div>
       ) : !pdfBytes ? (
-        <div className="mt-20 text-center p-20 border-2 border-dashed border-gray-300 rounded-3xl max-w-md bg-white">
-           <p className="text-gray-500 font-medium">Nenhum PDF carregado</p>
+        <div className="mt-20 text-center p-20 border-2 border-dashed border-gray-600 rounded-lg max-w-md bg-[#333]">
+           <p className="text-gray-400 font-medium">Nenhum PDF carregado</p>
         </div>
       ) : (
-        /* A FOLHA: Agora com bordas, sombra longa e div protetora para o Fabric */
+        /* A FOLHA: Fundo branco, pontas quadradas, sombra escura igual ao CutePDF */
         <div 
           key={`canvas-wrapper-${currentPage}`}
           id="canvas-container"
-          className="relative bg-white shadow-[0_20px_50px_rgba(0,0,0,0.1)] transition-all duration-300 mb-24"
+          className="relative bg-white shadow-[0_5px_15px_rgba(0,0,0,0.6)] flex-shrink-0"
           style={{ width: canvasSize.width, height: canvasSize.height }}
           {...getRootProps()}
         >
           <input {...getInputProps()} />
-          <canvas ref={pdfCanvasRef} className="absolute inset-0 pointer-events-none w-full h-full" style={{ zIndex: 1 }} />
           
-          {/* Div que isola o Fabric do monitoramento do React */}
-          <div className="absolute inset-0" style={{ zIndex: 2 }}>
+          {/* O segredo pra não esticar: o width e height vem direto do JS em px */}
+          <canvas 
+            ref={pdfCanvasRef} 
+            className="absolute top-0 left-0 pointer-events-none" 
+            style={{ zIndex: 1, width: canvasSize.width, height: canvasSize.height }} 
+          />
+          
+          <div className="absolute top-0 left-0" style={{ zIndex: 2, width: canvasSize.width, height: canvasSize.height }}>
             <canvas ref={canvasRef} />
           </div>
           
           {isDragActive && (
-            <div className="absolute inset-0 bg-primary-500/10 z-50 flex items-center justify-center border-4 border-primary-500 border-dashed m-2 rounded-lg">
-               <p className="bg-white px-6 py-3 rounded-xl shadow-xl font-bold text-primary-600">Solte para inserir imagem</p>
+            <div className="absolute inset-0 bg-black/40 z-50 flex items-center justify-center border-4 border-white border-dashed m-2">
+               <p className="bg-white px-6 py-3 shadow-xl font-bold text-black">Solte para inserir imagem</p>
             </div>
           )}
         </div>
       )}
 
-      {/* Navegação Flutuante Atualizada e mais bonita */}
+      {/* Navegação de página flutuante na parte inferior */}
       {pdfDoc && pdfDoc.numPages > 1 && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-6 bg-white/90 dark:bg-dark-900/90 backdrop-blur-xl shadow-[0_10px_40px_rgba(0,0,0,0.2)] border border-gray-200 rounded-full px-8 py-4 z-50">
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-6 bg-[#1e1e1e] shadow-[0_5px_15px_rgba(0,0,0,0.8)] border border-gray-700 rounded px-6 py-3 z-50 text-white">
           <button 
-            className="p-2 rounded-xl hover:bg-gray-100 disabled:opacity-20 transition-all font-bold text-xl" 
+            className="p-1 px-3 hover:bg-gray-700 disabled:opacity-30 transition-all font-bold" 
             onClick={() => setCurrentPage(Math.max(0, currentPage - 1))} 
             disabled={currentPage === 0}
           >
-            ←
+            ← Anterior
           </button>
           
-          <div className="flex flex-col items-center min-w-[120px]">
-             <span className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">Página</span>
-             <span className="text-sm font-black">
+          <div className="flex flex-col items-center min-w-[100px]">
+             <span className="text-sm font-medium">
                {currentPage + 1} / {pdfDoc.numPages}
              </span>
           </div>
 
           <button 
-            className="p-2 rounded-xl hover:bg-gray-100 disabled:opacity-20 transition-all font-bold text-xl" 
+            className="p-1 px-3 hover:bg-gray-700 disabled:opacity-30 transition-all font-bold" 
             onClick={() => setCurrentPage(Math.min(pdfDoc.numPages - 1, currentPage + 1))} 
             disabled={currentPage >= pdfDoc.numPages - 1}
           >
-            →
+            Próximo →
           </button>
         </div>
       )}
