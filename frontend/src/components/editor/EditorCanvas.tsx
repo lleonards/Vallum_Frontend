@@ -5,10 +5,10 @@ import * as pdfjsLib from 'pdfjs-dist'
 import { useDropzone } from 'react-dropzone'
 import toast from 'react-hot-toast'
 
-// Acessando a classe Canvas de forma segura para evitar erros de compilação em produção
+// Acesso seguro para evitar erros de tipos/versão
 const fabric = (fabricLib as any).fabric || fabricLib;
 
-// Configuração do Worker do PDF.js via CDN (mais estável para deploy)
+// Configuração do Worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
 
 export default function EditorCanvas() {
@@ -29,20 +29,16 @@ export default function EditorCanvas() {
   const isDragging = useRef(false)
   const lastPos = useRef({ x: 0, y: 0 })
 
-  // 1. Carregar o documento PDF
+  // 1. CARREGAR PDF
   useEffect(() => {
     if (!pdfBytes) return
     setLoading(true)
     pdfjsLib.getDocument({ data: pdfBytes }).promise.then((doc) => {
       setPdfDoc(doc)
       setTotalPages(doc.numPages)
-      const pagesArr = Array.from({ length: doc.numPages }, (_, i) => ({
-        index: i,
-        width: 794,
-        height: 1122,
-        rotation: 0,
-      }))
-      setPages(pagesArr)
+      setPages(Array.from({ length: doc.numPages }, (_, i) => ({
+        index: i, width: 794, height: 1122, rotation: 0,
+      })))
       setLoading(false)
     }).catch((err) => {
       console.error(err)
@@ -51,47 +47,51 @@ export default function EditorCanvas() {
     })
   }, [pdfBytes, setTotalPages, setPages, setLoading])
 
-  // 2. Renderizar a página do PDF no canvas de fundo
+  // 2. RENDERIZAR PÁGINA (BACKGROUND)
   useEffect(() => {
     if (!pdfDoc || !pdfCanvasRef.current) return
-    
     const renderPage = async () => {
       try {
         const page = await pdfDoc.getPage(currentPage + 1)
         const viewport = page.getViewport({ scale: zoom * 1.5 })
-        
         const canvas = pdfCanvasRef.current!
         const ctx = canvas.getContext('2d')!
         canvas.width = viewport.width
         canvas.height = viewport.height
-        
         setCanvasSize({ width: viewport.width, height: viewport.height })
-        
         await page.render({ canvasContext: ctx, viewport }).promise
       } catch (err) {
         console.error('Erro ao renderizar página:', err)
       }
     }
-
     renderPage()
   }, [pdfDoc, currentPage, zoom])
 
-  // 3. Salvar o que foi desenhado
+  // 3. SALVAR ESTADO
   const saveCanvasState = useCallback(() => {
     if (!fabricRef.current) return
     const json = JSON.stringify(fabricRef.current.toJSON())
     updatePage(currentPage, { fabricJson: json })
   }, [currentPage, updatePage])
 
-  // 4. Lógica de Clique (Inserir Texto, Formas, etc)
+  // 4. LÓGICA DE CLIQUE E FERRAMENTAS
   const handleCanvasClick = useCallback((pointer: { x: number; y: number }, opt: any) => {
     const canvas = fabricRef.current
-    if (!canvas || activeTool === 'select' || activeTool === 'pan') return
+    if (!canvas || activeTool === 'select' || activeTool === 'pan' || activeTool === 'pen') return
+
+    const commonProps = {
+      left: pointer.x,
+      top: pointer.y,
+      fill: fillColor,
+      stroke: strokeColor,
+      strokeWidth,
+    }
 
     if (activeTool === 'text') {
+      const target = canvas.findTarget(opt.e)
+      if (target && target.type === 'textbox') return
       const text = new fabric.Textbox('Digite aqui...', {
-        left: pointer.x,
-        top: pointer.y,
+        ...commonProps,
         width: 200,
         fontSize,
         fontFamily,
@@ -102,100 +102,116 @@ export default function EditorCanvas() {
         textAlign,
         editable: true,
       })
-      canvas.add(text)
-      canvas.setActiveObject(text)
+      canvas.add(text).setActiveObject(text)
       text.enterEditing()
-      canvas.renderAll()
+    } else if (activeTool === 'rectangle') {
+      canvas.add(new fabric.Rect({ ...commonProps, width: 100, height: 80, rx: 4, ry: 4 }))
+    } else if (activeTool === 'circle') {
+      canvas.add(new fabric.Ellipse({ ...commonProps, rx: 50, ry: 40 }))
+    } else if (activeTool === 'line') {
+      canvas.add(new fabric.Line([pointer.x, pointer.y, pointer.x + 100, pointer.y], { stroke: strokeColor, strokeWidth }))
     }
-
-    if (activeTool === 'rectangle') {
-      const rect = new fabric.Rect({
-        left: pointer.x,
-        top: pointer.y,
-        width: 100,
-        height: 80,
-        fill: fillColor,
-        stroke: strokeColor,
-        strokeWidth,
-        rx: 4, ry: 4,
-      })
-      canvas.add(rect)
-      canvas.renderAll()
-    }
+    canvas.renderAll()
   }, [activeTool, fontFamily, fontSize, fontColor, fontBold, fontItalic, fontUnderline, textAlign, fillColor, strokeColor, strokeWidth])
 
-  // 5. Inicialização e Limpeza do Fabric (CORREÇÃO DO ERRO DE REMOVECHILD)
+  // 5. INICIALIZAR FABRIC (COM BLINDAGEM ANTI-ERRO)
   useEffect(() => {
-    if (!canvasRef.current) return
+    if (!canvasRef.current || !pdfBytes) return
     
-    // Criar o canvas
+    // Criar instância
     const canvas = new fabric.Canvas(canvasRef.current, {
       selection: true,
       preserveObjectStacking: true,
     })
-    
     fabricRef.current = canvas
 
-    canvas.on('object:modified', () => {
-      setHasChanges(true)
-      saveCanvasState()
-    })
-
+    // Eventos
+    canvas.on('object:modified', () => { setHasChanges(true); saveCanvasState(); })
+    canvas.on('object:added', () => setHasChanges(true))
     canvas.on('mouse:down', (opt: any) => {
       const pointer = canvas.getPointer(opt.e)
       handleCanvasClick(pointer, opt)
+      if (activeTool === 'pan') {
+        isDragging.current = true
+        lastPos.current = { x: (opt.e as MouseEvent).clientX, y: (opt.e as MouseEvent).clientY }
+      }
     })
+    canvas.on('mouse:move', (opt: any) => {
+      if (activeTool === 'pan' && isDragging.current) {
+        const e = opt.e as MouseEvent
+        canvas.relativePan(new fabric.Point(e.clientX - lastPos.current.x, e.clientY - lastPos.current.y))
+        lastPos.current = { x: e.clientX, y: e.clientY }
+      }
+    })
+    canvas.on('mouse:up', () => { isDragging.current = false })
 
-    // Função de limpeza robusta
+    // LIMPEZA CRÍTICA: Desmonta o Fabric antes do React tentar mexer no DOM
     return () => {
       if (fabricRef.current) {
-        try {
-          fabricRef.current.dispose()
-        } catch (e) {
-          console.warn("Aviso: Falha ao descartar canvas com segurança.")
-        }
+        fabricRef.current.dispose()
         fabricRef.current = null
       }
     }
-  }, [currentPage]) // Reinicia ao trocar de página para evitar acúmulo de memória
+  }, [currentPage, !!pdfBytes]) // Recria apenas se necessário
 
-  // 6. Sincronizar Tamanho do Canvas
+  // 6. SINCRONIZAR FERRAMENTAS E TAMANHO
   useEffect(() => {
-    if (!fabricRef.current) return
-    fabricRef.current.setWidth(canvasSize.width)
-    fabricRef.current.setHeight(canvasSize.height)
-    fabricRef.current.renderAll()
-  }, [canvasSize])
+    const canvas = fabricRef.current
+    if (!canvas) return
+    canvas.setWidth(canvasSize.width)
+    canvas.setHeight(canvasSize.height)
+    
+    canvas.isDrawingMode = activeTool === 'pen'
+    if (canvas.isDrawingMode) {
+      canvas.freeDrawingBrush.color = strokeColor
+      canvas.freeDrawingBrush.width = strokeWidth
+    }
+    
+    canvas.selection = !(activeTool === 'pan' || activeTool === 'zoom')
+    canvas.defaultCursor = activeTool === 'pan' ? 'grab' : (activeTool === 'text' ? 'text' : 'crosshair')
+    canvas.renderAll()
+  }, [canvasSize, activeTool, strokeColor, strokeWidth])
 
-  // 7. Atalhos de Teclado (Deletar objetos)
+  // 7. ATALHOS (COPY, PASTE, DELETE)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!fabricRef.current) return
       const canvas = fabricRef.current
+      if (!canvas || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
-        const activeObjs = canvas.getActiveObjects()
-        activeObjs.forEach((obj: any) => canvas.remove(obj))
+        canvas.getActiveObjects().forEach((obj: any) => canvas.remove(obj))
         canvas.discardActiveObject().renderAll()
         setHasChanges(true)
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+        canvas.getActiveObject()?.clone((cloned: any) => { canvas.clipboard = cloned })
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+        if (canvas.clipboard) {
+          canvas.clipboard.clone((cloned: any) => {
+            cloned.set({ left: cloned.left + 20, top: cloned.top + 20 })
+            canvas.add(cloned).setActiveObject(cloned).renderAll()
+          })
+        }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [setHasChanges])
 
-  // 8. Upload de Imagem via Drag and Drop
+  // 8. DROP DE IMAGEM
   const onDropImage = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0]
     if (!file || !fabricRef.current) return
     const reader = new FileReader()
     reader.onload = (e) => {
-      const dataUrl = e.target?.result as string
-      fabric.Image.fromURL(dataUrl, (img: any) => {
+      fabric.Image.fromURL(e.target?.result as string, (img: any) => {
         const canvas = fabricRef.current
-        img.set({ left: 50, top: 50, scaleX: 0.3, scaleY: 0.3 })
+        const scale = (canvas.getWidth() * 0.5) / img.width
+        img.set({ left: 50, top: 50, scaleX: scale, scaleY: scale })
         canvas.add(img).setActiveObject(img).renderAll()
         setHasChanges(true)
+        toast.success('Imagem adicionada!')
       })
     }
     reader.readAsDataURL(file)
@@ -203,12 +219,12 @@ export default function EditorCanvas() {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: onDropImage,
-    accept: { 'image/*': ['.png', '.jpg', '.jpeg'] },
+    accept: { 'image/*': ['.png', '.jpg', '.jpeg', '.webp', '.svg'] },
     noClick: activeTool !== 'image',
   })
 
   return (
-    <div key="main-editor-container" className="editor-canvas-wrapper flex items-center justify-center p-8 min-h-screen bg-gray-50 dark:bg-dark-900" ref={containerRef}>
+    <div className="editor-canvas-wrapper flex items-center justify-center p-8 min-h-screen bg-gray-50 dark:bg-dark-900" ref={containerRef}>
       {isLoading ? (
         <div className="flex flex-col items-center gap-3">
           <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600" />
@@ -217,51 +233,37 @@ export default function EditorCanvas() {
       ) : !pdfBytes ? (
         <div className="text-center p-20 border-2 border-dashed border-gray-300 rounded-3xl max-w-md">
            <p className="text-gray-500 font-medium">Nenhum PDF carregado</p>
-           <p className="text-xs text-gray-400 mt-2">Faça o upload de um arquivo para começar</p>
         </div>
       ) : (
-        /* O segredo da proteção: envolver tudo em uma div com ID único */
-        <div id="canvas-interaction-layer" className="relative transition-all duration-300">
-            <div
-              className="relative bg-white shadow-2xl"
-              style={{ width: canvasSize.width, height: canvasSize.height }}
-              {...getRootProps()}
-            >
-              <input {...getInputProps()} />
-              {/* Canvas do PDF (Abaixo) */}
-              <canvas ref={pdfCanvasRef} className="absolute inset-0 pointer-events-none" />
-              {/* Canvas de Edição (Acima) */}
-              <canvas ref={canvasRef} className="absolute inset-0" />
-              
-              {isDragActive && (
-                <div className="absolute inset-0 bg-primary-500/10 z-50 flex items-center justify-center border-4 border-primary-500 border-dashed">
-                   <p className="bg-white px-6 py-3 rounded-xl shadow-xl font-bold text-primary-600">Solte para inserir a imagem</p>
-                </div>
-              )}
+        /* O segredo da correção: div envolvente com ID e Key para isolar o DOM do React */
+        <div 
+          key={`canvas-wrapper-${currentPage}`}
+          id="canvas-container"
+          className="relative bg-white shadow-2xl transition-all duration-300"
+          style={{ width: canvasSize.width, height: canvasSize.height }}
+          {...getRootProps()}
+        >
+          <input {...getInputProps()} />
+          <canvas ref={pdfCanvasRef} className="absolute inset-0 pointer-events-none" style={{ zIndex: 1 }} />
+          
+          {/* Div que isola o Fabric do monitoramento do React */}
+          <div className="absolute inset-0" style={{ zIndex: 2 }}>
+            <canvas ref={canvasRef} />
+          </div>
+          
+          {isDragActive && (
+            <div className="absolute inset-0 bg-primary-500/10 z-50 flex items-center justify-center border-4 border-primary-500 border-dashed">
+               <p className="bg-white px-6 py-3 rounded-xl shadow-xl font-bold text-primary-600">Solte para inserir</p>
             </div>
+          )}
         </div>
       )}
 
-      {/* Navegação de Páginas */}
       {pdfDoc && pdfDoc.numPages > 1 && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-white/90 dark:bg-dark-800/90 backdrop-blur shadow-2xl border border-gray-200 dark:border-dark-700 rounded-full px-6 py-3 z-50">
-          <button 
-            className="p-2 hover:bg-gray-100 rounded-full disabled:opacity-30" 
-            onClick={() => setCurrentPage(Math.max(0, currentPage - 1))} 
-            disabled={currentPage === 0}
-          >
-            ←
-          </button>
-          <span className="text-sm font-bold min-w-[120px] text-center">
-            PÁGINA {currentPage + 1} DE {pdfDoc.numPages}
-          </span>
-          <button 
-            className="p-2 hover:bg-gray-100 rounded-full disabled:opacity-30" 
-            onClick={() => setCurrentPage(Math.min(pdfDoc.numPages - 1, currentPage + 1))} 
-            disabled={currentPage >= pdfDoc.numPages - 1}
-          >
-            →
-          </button>
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-white/90 dark:bg-dark-800/90 backdrop-blur shadow-2xl border border-gray-200 rounded-full px-6 py-3 z-50">
+          <button className="p-2 disabled:opacity-20" onClick={() => setCurrentPage(Math.max(0, currentPage - 1))} disabled={currentPage === 0}>←</button>
+          <span className="text-sm font-bold min-w-[100px] text-center">PÁGINA {currentPage + 1} DE {pdfDoc.numPages}</span>
+          <button className="p-2 disabled:opacity-20" onClick={() => setCurrentPage(Math.min(pdfDoc.numPages - 1, currentPage + 1))} disabled={currentPage >= pdfDoc.numPages - 1}>→</button>
         </div>
       )}
     </div>
