@@ -60,14 +60,7 @@ const HomePage = () => {
           letterSpacing: '-0.02em'
         }}>
           Crie documentos<br />
-          <span style={{
-            background: isDark
-              ? 'linear-gradient(135deg, #ffffff 0%, #aaaaaa 100%)'
-              : 'linear-gradient(135deg, #3d3d3d 0%, #888888 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text'
-          }}>
+          <span style={{ color: isDark ? '#ffffff' : '#3d3d3d' }}>
             incríveis com Vellum
           </span>
         </h1>
