@@ -1,0 +1,30 @@
+# Vellum Frontend - Render Deploy Configuration
+
+services:
+  - type: web
+    name: vellum-frontend
+    env: static
+    region: oregon
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./build
+    pullRequestPreviewsEnabled: true
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-XSS-Protection
+        value: 1; mode=block
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: REACT_APP_API_URL
+        sync: false
+      - key: REACT_APP_SUPABASE_URL
+        sync: false
+      - key: REACT_APP_SUPABASE_ANON_KEY
+        sync: false
+      - key: REACT_APP_STRIPE_PUBLISHABLE_KEY
+        sync: false
