@@ -37,9 +37,9 @@ export const AuthProvider = ({ children }) => {
     return userData;
   };
 
-  // CORREÇÃO: Enviando "username" em vez de "name" para agradar o Backend
+  // CORREÇÃO FINAL: Voltando para 'name' porque o seu backend confirmou que é isso que ele espera.
   const register = async (name, email, password) => {
-    const res = await api.post('/auth/register', { username: name, email, password });
+    const res = await api.post('/auth/register', { name, email, password });
     return res.data;
   };
 
