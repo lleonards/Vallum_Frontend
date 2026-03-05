@@ -9,38 +9,51 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(() => localStorage.getItem('vellum-token'));
 
   const loadUser = useCallback(async (tkn) => {
-    if (!tkn) { setLoading(false); return; }
+    if (!tkn) {
+      setLoading(false);
+      return;
+    }
     try {
-      const res = await api.get('/user/profile', {
-        headers: { Authorization: `Bearer ${tkn}` }
-      });
+      // Busca o perfil do usuário usando o token salvo
+      const res = await api.get('/user/profile');
       setUser(res.data);
-    } catch {
-      localStorage.removeItem('vellum-token');
-      localStorage.removeItem('vellum-refresh-token');
-      setToken(null);
-      setUser(null);
+    } catch (err) {
+      console.error("Erro ao carregar usuário:", err);
+      logout();
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { loadUser(token); }, [token, loadUser]);
+  useEffect(() => {
+    loadUser(token);
+  }, [token, loadUser]);
 
   const login = async (email, password) => {
-    const res = await api.post('/auth/login', { email, password });
-    const { token: tkn, refreshToken, user: userData } = res.data;
-    localStorage.setItem('vellum-token', tkn);
-    localStorage.setItem('vellum-refresh-token', refreshToken);
-    setToken(tkn);
-    setUser(userData);
-    return userData;
+    try {
+      const res = await api.post('/auth/login', { email, password });
+      const { token: tkn, refreshToken, user: userData } = res.data;
+      
+      localStorage.setItem('vellum-token', tkn);
+      localStorage.setItem('vellum-refresh-token', refreshToken);
+      
+      setToken(tkn);
+      setUser(userData);
+      return userData;
+    } catch (err) {
+      throw err;
+    }
   };
 
-  // CORREÇÃO FINAL: Voltando para 'name' porque o seu backend confirmou que é isso que ele espera.
   const register = async (name, email, password) => {
-    const res = await api.post('/auth/register', { name, email, password });
-    return res.data;
+    try {
+      // O seu backend em routes/auth.js valida: if (!email || !password || !name)
+      // Portanto, o objeto enviado deve ter exatamente essas chaves.
+      const res = await api.post('/auth/register', { name, email, password });
+      return res.data;
+    } catch (err) {
+      throw err;
+    }
   };
 
   const logout = () => {
@@ -53,12 +66,19 @@ export const AuthProvider = ({ children }) => {
   const refreshUser = () => loadUser(token);
 
   const isAuthenticated = !!user && !!token;
-  const isPro = user?.plan === 'pro';
+  const isPro = user?.plan === 'pro' || user?.plan === 'premium';
 
   return (
     <AuthContext.Provider value={{
-      user, token, loading, isAuthenticated, isPro,
-      login, register, logout, refreshUser
+      user,
+      token,
+      loading,
+      isAuthenticated,
+      isPro,
+      login,
+      register,
+      logout,
+      refreshUser
     }}>
       {children}
     </AuthContext.Provider>
