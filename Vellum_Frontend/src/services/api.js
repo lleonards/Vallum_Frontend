@@ -1,12 +1,14 @@
 import axios from 'axios';
 
-const API_URL = https://vallum-backend.onrender.com
+// Substituímos o localhost pela sua URL do Render diretamente para evitar erro de conexão
+const API_URL = 'https://vallum-backend.onrender.com/api';
+
 const api = axios.create({
   baseURL: API_URL,
   timeout: 60000
 });
 
-// Request interceptor: attach token
+// Interceptor de Requisição: anexa o token se ele existir
 api.interceptors.request.use(config => {
   const token = localStorage.getItem('vellum-token');
   if (token && !config.headers.Authorization) {
@@ -15,7 +17,7 @@ api.interceptors.request.use(config => {
   return config;
 });
 
-// Response interceptor: handle 401 refresh
+// Interceptor de Resposta: lida com atualização de token (refresh)
 api.interceptors.response.use(
   res => res,
   async err => {
