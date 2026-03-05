@@ -29,12 +29,12 @@ const RegisterPage = () => {
     setLoading(true);
     try {
       await register(form.name, form.email, form.password);
-      // Auto login after registration
+      // Auto login após o registro
       await login(form.email, form.password);
       toast.success('Conta criada com sucesso! 🎉');
       navigate('/dashboard');
     } catch (err) {
-      const msg = err.response?.data?.error || 'Erro ao criar conta';
+      const msg = err.response?.data?.error || 'Erro ao criar conta. Verifique os dados ou tente novamente.';
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -89,6 +89,8 @@ const RegisterPage = () => {
               <input
                 className="input"
                 type="text"
+                name="name"
+                autoComplete="name"
                 placeholder="Seu nome"
                 value={form.name}
                 onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))}
@@ -101,6 +103,8 @@ const RegisterPage = () => {
               <input
                 className="input"
                 type="email"
+                name="email"
+                autoComplete="email"
                 placeholder="seu@email.com"
                 value={form.email}
                 onChange={e => setForm(prev => ({ ...prev, email: e.target.value }))}
@@ -113,6 +117,8 @@ const RegisterPage = () => {
                 <input
                   className="input"
                   type={showPass ? 'text' : 'password'}
+                  name="password"
+                  autoComplete="new-password"
                   placeholder="Mínimo 6 caracteres"
                   value={form.password}
                   onChange={e => setForm(prev => ({ ...prev, password: e.target.value }))}
@@ -154,6 +160,8 @@ const RegisterPage = () => {
               <input
                 className="input"
                 type={showPass ? 'text' : 'password'}
+                name="confirm-password"
+                autoComplete="new-password"
                 placeholder="Repita a senha"
                 value={form.confirm}
                 onChange={e => setForm(prev => ({ ...prev, confirm: e.target.value }))}
@@ -176,7 +184,6 @@ const RegisterPage = () => {
             </button>
           </form>
 
-          {/* Plan info */}
           <div style={{
             marginTop: 20,
             padding: '12px 16px',
