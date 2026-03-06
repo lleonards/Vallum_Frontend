@@ -7,24 +7,32 @@ const api = axios.create({
   timeout: 60000
 });
 
-// Interceptor de requisição
+// ==============================
+// REQUEST INTERCEPTOR
+// ==============================
 api.interceptors.request.use(config => {
+
   const token = localStorage.getItem('vellum-token');
 
-  if (token && !config.headers.Authorization) {
-    config.headers.Authorization = `Bearer ${token}`;
+  if (token) {
+    config.headers['Authorization'] = `Bearer ${token}`;
   }
 
   return config;
+
 });
 
-// Interceptor de resposta (refresh token)
+// ==============================
+// RESPONSE INTERCEPTOR (REFRESH TOKEN)
+// ==============================
 api.interceptors.response.use(
   response => response,
+
   async error => {
 
     const originalRequest = error.config;
 
+    // Se for token expirado
     if (error.response?.status === 401 && !originalRequest._retry) {
 
       originalRequest._retry = true;
@@ -45,11 +53,13 @@ api.interceptors.response.use(
           localStorage.setItem('vellum-token', token);
           localStorage.setItem('vellum-refresh-token', newRefresh);
 
-          originalRequest.headers.Authorization = `Bearer ${token}`;
+          originalRequest.headers['Authorization'] = `Bearer ${token}`;
 
           return api(originalRequest);
 
-        } catch {
+        } catch (refreshError) {
+
+          console.error("Refresh token error", refreshError);
 
           localStorage.removeItem('vellum-token');
           localStorage.removeItem('vellum-refresh-token');
@@ -59,10 +69,10 @@ api.interceptors.response.use(
         }
 
       }
-
     }
 
     return Promise.reject(error);
+
   }
 );
 
