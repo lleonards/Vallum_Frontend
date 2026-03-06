@@ -12,29 +12,36 @@ const RegisterPage = () => {
   const [loading, setLoading] = useState(false);
   const [showPass, setShowPass] = useState(false);
 
+  const handleChange = (field) => (e) =>
+    setForm(prev => ({ ...prev, [field]: e.target.value }));
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     if (!form.name || !form.email || !form.password) {
       toast.error('Preencha todos os campos');
       return;
     }
     if (form.password.length < 6) {
-      toast.error('Senha deve ter pelo menos 6 caracteres');
+      toast.error('A senha deve ter pelo menos 6 caracteres');
       return;
     }
     if (form.password !== form.confirm) {
       toast.error('As senhas não coincidem');
       return;
     }
+
     setLoading(true);
     try {
       await register(form.name, form.email, form.password);
-      // Auto login após o registro
+      // Auto-login após registro
       await login(form.email, form.password);
       toast.success('Conta criada com sucesso! 🎉');
       navigate('/dashboard');
     } catch (err) {
-      const msg = err.response?.data?.error || 'Erro ao criar conta. Verifique os dados ou tente novamente.';
+      const msg =
+        err.response?.data?.error ||
+        'Erro ao criar conta. Verifique os dados ou tente novamente.';
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -71,7 +78,10 @@ const RegisterPage = () => {
       </div>
 
       <div style={{ width: '100%', maxWidth: 440 }}>
-        <Link to="/" style={{ display: 'flex', justifyContent: 'center', marginBottom: 40, color: 'var(--text-primary)' }}>
+        <Link
+          to="/"
+          style={{ display: 'flex', justifyContent: 'center', marginBottom: 40, color: 'var(--text-primary)' }}
+        >
           <VellumLogo size={36} showText={true} />
         </Link>
 
@@ -84,6 +94,8 @@ const RegisterPage = () => {
           </p>
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+            {/* Nome */}
             <div>
               <label className="label">Nome completo</label>
               <input
@@ -93,13 +105,14 @@ const RegisterPage = () => {
                 autoComplete="name"
                 placeholder="Seu nome"
                 value={form.name}
-                onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))}
+                onChange={handleChange('name')}
                 autoFocus
               />
             </div>
 
+            {/* Email */}
             <div>
-              <label className="label">Email</label>
+              <label className="label">E-mail</label>
               <input
                 className="input"
                 type="email"
@@ -107,10 +120,11 @@ const RegisterPage = () => {
                 autoComplete="email"
                 placeholder="seu@email.com"
                 value={form.email}
-                onChange={e => setForm(prev => ({ ...prev, email: e.target.value }))}
+                onChange={handleChange('email')}
               />
             </div>
 
+            {/* Senha */}
             <div>
               <label className="label">Senha</label>
               <div style={{ position: 'relative' }}>
@@ -121,26 +135,41 @@ const RegisterPage = () => {
                   autoComplete="new-password"
                   placeholder="Mínimo 6 caracteres"
                   value={form.password}
-                  onChange={e => setForm(prev => ({ ...prev, password: e.target.value }))}
+                  onChange={handleChange('password')}
                   style={{ paddingRight: 44 }}
                 />
-                <button type="button" onClick={() => setShowPass(p => !p)} style={{
-                  position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
-                  background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)',
-                  padding: 4, display: 'flex'
-                }}>
+                <button
+                  type="button"
+                  onClick={() => setShowPass(p => !p)}
+                  style={{
+                    position: 'absolute', right: 12, top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--text-muted)', padding: 4, display: 'flex'
+                  }}
+                  aria-label={showPass ? 'Ocultar senha' : 'Mostrar senha'}
+                >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    {showPass
-                      ? <><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></>
-                      : <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></>
-                    }
+                    {showPass ? (
+                      <>
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                        <line x1="1" y1="1" x2="23" y2="23" />
+                      </>
+                    ) : (
+                      <>
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </>
+                    )}
                   </svg>
                 </button>
               </div>
+
+              {/* Barra de força da senha */}
               {form.password && (
                 <div style={{ marginTop: 8 }}>
                   <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
-                    {[1,2,3,4,5].map(i => (
+                    {[1, 2, 3, 4, 5].map(i => (
                       <div key={i} style={{
                         flex: 1, height: 4, borderRadius: 2,
                         background: i <= strength ? strengthColors[strength] : 'var(--border-color)',
@@ -155,6 +184,7 @@ const RegisterPage = () => {
               )}
             </div>
 
+            {/* Confirmar Senha */}
             <div>
               <label className="label">Confirmar senha</label>
               <input
@@ -164,13 +194,15 @@ const RegisterPage = () => {
                 autoComplete="new-password"
                 placeholder="Repita a senha"
                 value={form.confirm}
-                onChange={e => setForm(prev => ({ ...prev, confirm: e.target.value }))}
+                onChange={handleChange('confirm')}
                 style={{
                   borderColor: form.confirm && form.confirm !== form.password ? '#ef4444' : undefined
                 }}
               />
               {form.confirm && form.confirm !== form.password && (
-                <p style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>Senhas não coincidem</p>
+                <p style={{ color: '#ef4444', fontSize: 12, marginTop: 4 }}>
+                  As senhas não coincidem
+                </p>
               )}
             </div>
 
@@ -180,7 +212,9 @@ const RegisterPage = () => {
               style={{ width: '100%', marginTop: 8 }}
               disabled={loading}
             >
-              {loading ? <><div className="spinner" />&nbsp;Criando conta...</> : 'Criar Conta Grátis'}
+              {loading
+                ? <><div className="spinner" />&nbsp;Criando conta...</>
+                : 'Criar Conta Grátis'}
             </button>
           </form>
 
@@ -199,7 +233,9 @@ const RegisterPage = () => {
 
           <p style={{ textAlign: 'center', marginTop: 20, fontSize: 14, color: 'var(--text-secondary)' }}>
             Já tem conta?{' '}
-            <Link to="/login" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Entrar</Link>
+            <Link to="/login" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+              Entrar
+            </Link>
           </p>
         </div>
       </div>
